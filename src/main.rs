@@ -1,10 +1,16 @@
 use sqlx::postgres::{PgPoolOptions, PgRow};
 use sqlx::{Row, FromRow};    // 引入sqlx::{Row}才能用get方法
+use sqlb::{Fields, HasFields};
 
-#[derive(Debug, FromRow)]
-struct Person {
-    id: i64,
-    name: String,
+// #[derive(Debug, FromRow)]
+// struct Person {
+//     id: i64,
+//     name: String,
+// }
+
+#[derive(sqlb::Fields)]     // 必须加这个宏才能插入数据
+struct PersonPatch {        // 习惯的命名方式
+    name: Option<String>,   // 必须加上Option
 }
 
 #[tokio::main]
@@ -48,16 +54,57 @@ async fn main() -> Result<(), sqlx::Error> {
     //     .join(", ");
 
     // 更好的写法
-    let select_query = sqlx::query("select * from person");
-    let persons: Vec<Person> = select_query
-        .map(|row: PgRow| Person {
-            id: row.get("id"),
-            name: row.get("name"),
-        })
-        .fetch_all(&pool)
-        .await?;
+    // let select_query = sqlx::query("select * from person");
+    // let persons: Vec<Person> = select_query
+    //     .map(|row: PgRow| Person {
+    //         id: row.get("id"),
+    //         name: row.get("name"),
+    //     })
+    //     .fetch_all(&pool)
+    //     .await?;
+    //
+    // println!("{:#?}", persons);
 
-    println!("{:#?}", persons);
+    // 使用sqlb插入
+    let patch_data = PersonPatch {
+        name: Some("abc".to_string()),
+    };
 
+    let sb = sqlb::insert()
+        .table("person")
+        .data(patch_data.fields())
+        .returning(&["id"]);
+
+    let (id, ) = sb.fetch_one::<(i64, ), _>(&pool).await?;
+    println!("{}", id);
+
+    // 使用sqlb查找
+    // let sb = sqlb::select()
+    //     .table("person")
+    //     .columns(&["id", "name"])
+    //     .order_by("!id");        // "!id"表示按id逆序
+    //
+    // let ps: Vec<Person> = sb.fetch_all(&pool).await?;
+    // println!("{:?}", ps);
+    //
+    // // 使用sqlb删除
+    // let sb = sqlb::delete()
+    //     .table("person")
+    //     .returning(&["id"])
+    //     .and_where_eq("id", 1);
+    // let (id, ) = sb.fetch_one::<(i64, ), _>(&pool).await?;
+    // println!("delete item's id: {}", id);
+    //
+    // // 更新
+    // let patch_data = PersonPatch {
+    //     name: Some("yy".to_string()),
+    // };
+    // let sb = sqlb::update()
+    //     .table("person")
+    //     .data(patch_data.fields())
+    //     .and_where_eq("id", 5)
+    //     .returning(&["id"]);
+    // let (id, ) = sb.fetch_one::<(i64, ), _>(&pool).await?;
+    // println!("update item's id: {}", id);
     Ok(())
 }
